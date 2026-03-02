@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="30" height="30" tilewidth="32" tileheight="32" infinite="0" nextlayerid="14" nextobjectid="1">
+ <imagelayer id="13" name="OfficeRoom">
+  <image source="../OfficeRoomModerna.png" width="2048" height="2048"/>
+ </imagelayer>
+</map>
