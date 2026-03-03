@@ -1,33 +1,43 @@
-# Estagio de construcao do cliente.
-from node:22-slim as builder
+# ============================================================
+# Estagio 1: build do frontend (client)
+# Compila os assets estaticos via Vite
+# ============================================================
+FROM node:18-alpine AS build-client
 
-workdir /app/client
+WORKDIR /app/client
 
-copy client/package*.json ./
-run npm ci
+# Copia apenas os arquivos de dependencia primeiro para aproveitar o cache do Docker
+COPY client/package.json client/package-lock.json ./
+RUN npm ci
 
-copy client/ ./
-run npm run build
+# Copia o restante do codigo do cliente e executa o build
+COPY client/ ./
+RUN npm run build
 
-# Estagio final de producao.
-from node:22-slim
+# ============================================================
+# Estagio 2: imagem final de producao (server)
+# Serve apenas o backend com os assets estaticos ja compilados
+# ============================================================
+FROM node:18-alpine AS production
 
-workdir /app
+WORKDIR /app
 
-run chown node:node /app
+# Copia apenas os arquivos de dependencia do servidor
+COPY server/package.json server/package-lock.json ./
+RUN npm ci --omit=dev
 
-user node
+# Copia o codigo do servidor
+COPY server/ ./
 
-workdir /app/server
-copy --chown=node:node server/package*.json ./
-run npm ci --omit=dev
+# Copia os assets estaticos compilados pelo Vite para a pasta publica do servidor
+# O Express serve esta pasta via express.static
+COPY --from=build-client /app/client/dist ./public
 
-copy --chown=node:node server/ ./
+# Porta exposta pelo servidor (deve coincidir com process.env.PORT ou o padrao 8081)
+EXPOSE 8081
 
-run mkdir -p public
-copy --chown=node:node --from=builder /app/client/dist/ ./public/
+# Variavel de ambiente de producao
+ENV NODE_ENV=production
 
-workdir /app
-expose 8081
-
-cmd ["node", "server/index.js"]
+# Comando de inicializacao
+CMD ["node", "index.js"]
