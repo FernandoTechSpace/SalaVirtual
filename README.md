@@ -1,5 +1,7 @@
 # Virtual Room - Debug com Café
 
+## Criei uma sala virtual para interação e colaboração, onde apliquei meu conhecimento técnico de JavaScript, Node.js, Express, Docker e Cloud.
+
 Plataforma de interação virtual em tempo real, para colaboração entre a equipe tech, construída em ambiente 2D. O sistema permite que múltiplos usuários se conectem simultaneamente, naveguem pelo mapa, interajam via chat de texto, compartilhem áudio e transmitam a tela utilizando comunicação ponto a ponto (P2P).
 
 ## Funcionalidades Implementadas
@@ -18,7 +20,7 @@ Plataforma de interação virtual em tempo real, para colaboração entre a equi
 * **Backend:** Node.js, Express.
 * **Comunicação e Sinalização:** Socket.io (WebSockets puros).
 * **Comunicação Multimídia:** WebRTC (RTCPeerConnection).
-* **Infraestrutura:** Docker.
+* **Infraestrutura:** Docker e Cloud.
 
 ## Estrutura do Projeto
 
@@ -40,3 +42,16 @@ Para executar o projeto localmente, é necessário ter instalado:
 
 1. Clone o repositório e acesse a pasta raiz.
 2. Instale as dependências do servidor: npm install
+
+
+## Direitos autorais e diretrizes de uso
+
+Este repositório armazena o código-fonte da sala virtual desenvolvida com JavaScript, Node.js, Express, HTML, CSS e Docker. O acesso é público para amostra de capacidade técnica e compartilhamento de conhecimento.
+
+A autoria da arquitetura do projeto original é reservada a Fernando Henrique (copyright 2026).
+
+**Termos de permissão e limite de uso:**
+
+1. A cópia, o espelhamento, o download e a utilização de todo o código-fonte aqui disponível são permitidos, seja para uso em projetos pessoais, de estudo ou de mercado.
+2. O uso da base estrutural do sistema e de sua interface visual para o desenvolvimento de novos trabalhos é autorizado.
+3. Este repositório é estritamente fechado para contribuições externas. Qualquer envio de pacotes com alterações, correções ou novas funcionalidades (*pull requests*) para o código original deste repositório será sumariamente rejeitado, a fim de manter a versão original inalterada.
