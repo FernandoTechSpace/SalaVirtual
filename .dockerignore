@@ -1,7 +1,37 @@
+# Dependencias: reinstaladas dentro do container via npm ci
 node_modules
 client/node_modules
 server/node_modules
+
+# Build anterior do frontend: gerado no estagio de build do Docker
+client/dist
+
+# Banco de dados local de usuarios: nao deve ser incluido na imagem
+server/users.json
+
+# Arquivos de ambiente local: variaveis de producao devem ser injetadas via Docker ou cloud
+.env
+.env.*
+*.env
+
+# Controle de versao
 .git
+.gitignore
 .github
-dist
+
+# Logs
+*.log
+npm-debug.log*
+
+# Arquivos de sistema operacional
 .DS_Store
+Thumbs.db
+
+# Configuracoes de editores
+.vscode
+.idea
+*.swp
+*.swo
+
+# Arquivos de teste e documentacao (nao necessarios na imagem de producao)
+*.md

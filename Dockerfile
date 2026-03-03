@@ -1,40 +1,44 @@
-FROM node:22-slim
-
-WORKDIR /app
-
-# 1. Instala dependencias
-COPY server/package*.json ./server/
-COPY client/package*.json ./client/
-
-WORKDIR /app/server
-RUN npm ci --omit=dev
+# ============================================================
+# Estagio 1: build do frontend (client)
+# Compila os assets estaticos via Vite
+# ============================================================
+# Correcao: node:18-alpine e incompativel com Vite 7 (requer Node >= 20.19 ou >= 22.12)
+FROM node:22-alpine AS build-client
 
 WORKDIR /app/client
+
+# Copia apenas os arquivos de dependencia primeiro para aproveitar o cache do Docker
+COPY client/package.json client/package-lock.json ./
 RUN npm ci
 
-# 2. Argumento para quebrar o cache (CACHEBUST)
-ARG CACHEBUST=1
-
-# 3. Copia o código fonte
-WORKDIR /app
-COPY server/ ./server/
-COPY client/ ./client/
-
-# 4. Build do Frontend
-WORKDIR /app/client
+# Copia o restante do codigo do cliente e executa o build
+COPY client/ ./
 RUN npm run build
 
-# 5. Mover arquivos para o lugar CERTO (CORREÇÃO DE CAMINHO)
-WORKDIR /app
-# Garante que a pasta publica do servidor esteja limpa
-RUN rm -rf server/public
-RUN mkdir -p server/public
-# Copia do CLIENTE/DIST para SERVIDOR/PUBLIC
-RUN cp -r client/dist/* server/public/
+# ============================================================
+# Estagio 2: imagem final de producao (server)
+# Serve apenas o backend com os assets estaticos ja compilados
+# ============================================================
+FROM node:22-alpine AS production
 
-# 6. Permissões e Execução
-RUN chown -R node:node /app
-USER node
+WORKDIR /app
+
+# Copia apenas os arquivos de dependencia do servidor
+COPY server/package.json server/package-lock.json ./
+RUN npm ci --omit=dev
+
+# Copia o codigo do servidor
+COPY server/ ./
+
+# Copia os assets estaticos compilados pelo Vite para a pasta publica do servidor
+# O Express serve esta pasta via express.static
+COPY --from=build-client /app/client/dist ./public
+
+# Porta exposta pelo servidor (deve coincidir com process.env.PORT ou o padrao 8081)
 EXPOSE 8081
 
-CMD ["node", "server/index.js"]
+# Variavel de ambiente de producao
+ENV NODE_ENV=production
+
+# Comando de inicializacao
+CMD ["node", "index.js"]

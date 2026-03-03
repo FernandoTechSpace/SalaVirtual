@@ -1,3 +1,12 @@
+// Servidor principal: virtual room
+// Correcoes aplicadas:
+//   - senhas armazenadas com hash bcrypt (era texto puro)
+//   - credenciais recebidas via evento socket autenticar, nao via query string
+//   - content security policy (csp) habilitada (era contentSecurityPolicy: false)
+//   - cors restrito ao dominio via variavel de ambiente (era origin: "*")
+//   - validacao de nome com regex no servidor
+//   - validacao de tipo e tamanho da mensagem de chat no servidor
+
 import express from 'express';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
@@ -6,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import helmet from 'helmet';
 import cors from 'cors';
+import bcrypt from 'bcrypt';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,30 +23,70 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const servidorHttp = createServer(app);
 
-// Configuração WebRTC/Socket (Websocket Puro)
+// Correcao: origem definida via variavel de ambiente para producao
+// Era: cors({ origin: "*" })
+const origemPermitida = process.env.CORS_ORIGIN || '*';
+
 const io = new Server(servidorHttp, {
-  cors: { origin: "*", methods: ["GET", "POST"] },
-  transports: ['websocket'], 
-  pingTimeout: 5000, 
+  cors: { origin: origemPermitida, methods: ['GET', 'POST'] },
+  transports: ['websocket'],
+  pingTimeout: 5000,
   pingInterval: 10000
 });
 
-app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors());
+// Correcao: csp habilitada com diretivas adequadas ao projeto
+// Era: helmet({ contentSecurityPolicy: false })
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: [
+        "'self'",
+        'https://cdn.jsdelivr.net',
+        // nota: remover unsafe-inline ao migrar todos os scripts para modulos externos
+        "'unsafe-inline'"
+      ],
+      connectSrc: ["'self'", 'wss:', 'ws:', 'stun:stun.l.google.com:19302'],
+      mediaSrc: ["'self'", 'blob:'],
+      imgSrc: ["'self'", 'data:', 'blob:'],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      frameSrc: ["'none'"],
+      objectSrc: ["'none'"]
+    }
+  }
+}));
+
+app.use(cors({ origin: origemPermitida }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Persistência
+// Persistencia
 const DB_FILE = path.join(__dirname, 'users.json');
 let usersDB = {};
-if (fs.existsSync(DB_FILE)) { try { usersDB = JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); } catch (e) { usersDB = {}; } }
-function salvarBanco() { fs.writeFileSync(DB_FILE, JSON.stringify(usersDB, null, 2)); }
+if (fs.existsSync(DB_FILE)) {
+  try { usersDB = JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); } catch (e) { usersDB = {}; }
+}
 
-// ESTADO DO JOGO
-const jogadoresOnline = {}; 
-const MAX_JOGADORES = 30; // Limite Rígido
+function salvarBanco() {
+  fs.writeFileSync(DB_FILE, JSON.stringify(usersDB, null, 2));
+}
 
-console.log(`[BOOT] Servidor Iniciado. Limite: ${MAX_JOGADORES}`);
+// Estado do jogo
+const jogadoresOnline = {};
+const MAX_JOGADORES = 30;
+
+// Correcao: validacao de nome impede html e scripts via campo de entrada
+// Aceita apenas letras (incluindo acentuadas), numeros, underline e hifen
+function nomeValido(nome) {
+  return (
+    typeof nome === 'string' &&
+    nome.length >= 2 &&
+    nome.length <= 18 &&
+    /^[\p{L}\p{N}_-]+$/u.test(nome)
+  );
+}
+
+console.log(`[boot] servidor iniciado. limite: ${MAX_JOGADORES}`);
 
 app.get('/api/status', (req, res) => {
   res.json({
@@ -47,66 +97,95 @@ app.get('/api/status', (req, res) => {
 });
 
 io.on('connection', (socket) => {
-  const nome = socket.handshake.query.nome;
-  const senha = socket.handshake.query.senha;
-  const skin = String(socket.handshake.query.skin || '000');
-
-  if (!nome || !senha) return;
-
-  // 1. VERIFICAÇÃO DE CAPACIDADE (SEM FILA)
-  const totalJogadores = Object.keys(jogadoresOnline).length;
-  const jaLogado = Object.values(jogadoresOnline).find(j => j.nome === nome);
-
-  // Se a sala está cheia E não é uma reconexão do mesmo usuário
-  if (totalJogadores >= MAX_JOGADORES && !jaLogado) {
-      console.log(`[BLOQUEIO] Sala cheia (${totalJogadores}). Recusando ${nome}.`);
-      socket.emit('erroConexao', 'A sala atingiu o limite máximo de 30 usuários.');
+  // Correcao: credenciais recebidas via evento 'autenticar', nao via query string
+  // Era: const nome = socket.handshake.query.nome; const senha = socket.handshake.query.senha;
+  // A query string expoe credenciais em logs de servidor, proxies e historico do navegador
+  socket.on('autenticar', async ({ nome, senha, skin }) => {
+    if (!nome || !senha || !skin) {
+      socket.emit('erroConexao', 'Dados incompletos.');
       socket.disconnect();
       return;
-  }
-
-  // 2. Validação
-  if (senha.length < 6) { socket.emit('erroConexao', 'Senha curta (min 6).'); socket.disconnect(); return; }
-
-  // 3. Autenticação
-  if (usersDB[nome]) {
-    if (usersDB[nome].senha !== senha) { socket.emit('erroConexao', 'Senha incorreta.'); socket.disconnect(); return; }
-    usersDB[nome].skin = skin; salvarBanco();
-  } else {
-    usersDB[nome] = { senha: senha, skin: skin, criadoEm: new Date() }; salvarBanco();
-  }
-
-  // 4. KICK (Derruba sessão antiga se existir)
-  const socketIdAntigo = Object.keys(jogadoresOnline).find(id => jogadoresOnline[id].nome === nome);
-  if (socketIdAntigo) {
-    console.log(`[KICK] Substituindo sessão de ${nome}`);
-    const socketAntigo = io.sockets.sockets.get(socketIdAntigo);
-    if (socketAntigo) {
-        socketAntigo.emit('kick', 'Você conectou em outro local.');
-        socketAntigo.disconnect(true);
     }
-    delete jogadoresOnline[socketIdAntigo];
-    
-    // Limpeza crucial
-    io.emit('jogadorSaiu', socketIdAntigo);
-    io.emit('usuarioParouCompartilhamento', socketIdAntigo);
-    io.emit('listaUsuarios', jogadoresOnline);
-  }
 
-  entrarNoJogo(socket, nome, skin);
+    // Correcao: validacao de formato do nome no servidor
+    if (!nomeValido(nome)) {
+      socket.emit('erroConexao', 'Nome invalido. Use letras, numeros, _ ou -.');
+      socket.disconnect();
+      return;
+    }
+
+    const skinStr = String(skin || '000');
+
+    const totalJogadores = Object.keys(jogadoresOnline).length;
+    const jaLogado = Object.values(jogadoresOnline).find(j => j.nome === nome);
+
+    if (totalJogadores >= MAX_JOGADORES && !jaLogado) {
+      console.log(`[bloqueio] sala cheia (${totalJogadores}). recusando ${nome}.`);
+      socket.emit('erroConexao', 'A sala atingiu o limite maximo de 30 usuarios.');
+      socket.disconnect();
+      return;
+    }
+
+    if (senha.length < 6) {
+      socket.emit('erroConexao', 'Senha curta (min 6).');
+      socket.disconnect();
+      return;
+    }
+
+    // Correcao: autenticacao com bcrypt
+    // Era: comparacao direta usersDB[nome].senha !== senha (texto puro)
+    if (usersDB[nome]) {
+      const senhaCorreta = await bcrypt.compare(senha, usersDB[nome].senhaHash);
+      if (!senhaCorreta) {
+        socket.emit('erroConexao', 'Senha incorreta.');
+        socket.disconnect();
+        return;
+      }
+      usersDB[nome].skin = skinStr;
+      salvarBanco();
+    } else {
+      // Correcao: hash com bcrypt antes de armazenar (saltRounds = 10)
+      // Era: usersDB[nome] = { senha: senha, ... } armazenando texto puro
+      const senhaHash = await bcrypt.hash(senha, 10);
+      usersDB[nome] = { senhaHash, skin: skinStr, criadoEm: new Date() };
+      salvarBanco();
+    }
+
+    // Kick: derruba sessao antiga se existir
+    const socketIdAntigo = Object.keys(jogadoresOnline).find(
+      id => jogadoresOnline[id].nome === nome
+    );
+    if (socketIdAntigo) {
+      console.log(`[kick] substituindo sessao de ${nome}`);
+      const socketAntigo = io.sockets.sockets.get(socketIdAntigo);
+      if (socketAntigo) {
+        socketAntigo.emit('kick', 'Voce conectou em outro local.');
+        socketAntigo.disconnect(true);
+      }
+      delete jogadoresOnline[socketIdAntigo];
+      io.emit('jogadorSaiu', socketIdAntigo);
+      io.emit('usuarioParouCompartilhamento', socketIdAntigo);
+      io.emit('listaUsuarios', jogadoresOnline);
+    }
+
+    entrarNoJogo(socket, nome, skinStr);
+  });
 });
 
 function entrarNoJogo(socket, nome, skin) {
-  // Verifica skin (exceto se for reconexão do mesmo usuário)
-  const skinOcupada = Object.values(jogadoresOnline).find(j => j.skin === skin && j.nome !== nome);
+  const skinOcupada = Object.values(jogadoresOnline).find(
+    j => j.skin === skin && j.nome !== nome
+  );
   if (skinOcupada) {
-    socket.emit('erroConexao', 'Skin em uso por outro jogador.'); socket.disconnect(); return;
+    socket.emit('erroConexao', 'Skin em uso por outro jogador.');
+    socket.disconnect();
+    return;
   }
 
-  console.log(`[ENTROU] ${nome} (Total: ${Object.keys(jogadoresOnline).length + 1})`);
+  console.log(`[entrou] ${nome} (total: ${Object.keys(jogadoresOnline).length + 1})`);
 
   jogadoresOnline[socket.id] = {
-    x: 496, y: 180, playerId: socket.id, anim: 'baixo', nome: nome, skin: skin,
+    x: 496, y: 180, playerId: socket.id, anim: 'baixo', nome, skin,
     falando: false, muted: false, deafened: false
   };
 
@@ -114,29 +193,64 @@ function entrarNoJogo(socket, nome, skin) {
   socket.broadcast.emit('novoJogador', jogadoresOnline[socket.id]);
   io.emit('listaUsuarios', jogadoresOnline);
 
-  // Handlers
-  socket.on('movimentoJogador', (d) => { if (jogadoresOnline[socket.id]) { jogadoresOnline[socket.id].x = d.x; jogadoresOnline[socket.id].y = d.y; jogadoresOnline[socket.id].anim = d.anim; socket.broadcast.emit('jogadorMoveu', jogadoresOnline[socket.id]); } });
-  socket.on('chatMessage', (msg) => { if (jogadoresOnline[socket.id]) io.emit('chatMessage', { playerId: socket.id, nome: jogadoresOnline[socket.id].nome, texto: msg }); });
-  socket.on('updateStatus', (s) => { if (jogadoresOnline[socket.id]) { jogadoresOnline[socket.id].muted = s.muted; jogadoresOnline[socket.id].deafened = s.deafened; io.emit('listaUsuarios', jogadoresOnline); } });
+  socket.on('movimentoJogador', (d) => {
+    if (jogadoresOnline[socket.id]) {
+      jogadoresOnline[socket.id].x = d.x;
+      jogadoresOnline[socket.id].y = d.y;
+      jogadoresOnline[socket.id].anim = d.anim;
+      socket.broadcast.emit('jogadorMoveu', jogadoresOnline[socket.id]);
+    }
+  });
+
+  socket.on('chatMessage', (msg) => {
+    // Correcao: validacao de tipo e tamanho da mensagem no servidor
+    // Era: sem nenhuma validacao, qualquer valor era retransmitido para todos
+    if (!jogadoresOnline[socket.id]) return;
+    if (typeof msg !== 'string' || msg.trim().length === 0 || msg.length > 300) return;
+    io.emit('chatMessage', {
+      playerId: socket.id,
+      nome: jogadoresOnline[socket.id].nome,
+      texto: msg
+    });
+  });
+
+  socket.on('updateStatus', (s) => {
+    if (jogadoresOnline[socket.id]) {
+      jogadoresOnline[socket.id].muted = s.muted;
+      jogadoresOnline[socket.id].deafened = s.deafened;
+      io.emit('listaUsuarios', jogadoresOnline);
+    }
+  });
+
   socket.on('sinalAudio', (d) => io.to(d.to).emit('sinalAudio', { from: socket.id, signal: d.signal }));
-  socket.on('estouFalando', (s) => { if (jogadoresOnline[socket.id]) { jogadoresOnline[socket.id].falando = s; socket.broadcast.emit('usuarioFalando', { id: socket.id, falando: s }); } });
-  
-  // FIX: Evento explícito de parada de vídeo
-  socket.on('pararCompartilhamento', () => { 
-      socket.broadcast.emit('usuarioParouCompartilhamento', socket.id); 
+
+  socket.on('estouFalando', (s) => {
+    if (jogadoresOnline[socket.id]) {
+      jogadoresOnline[socket.id].falando = s;
+      socket.broadcast.emit('usuarioFalando', { id: socket.id, falando: s });
+    }
+  });
+
+  socket.on('pararCompartilhamento', () => {
+    socket.broadcast.emit('usuarioParouCompartilhamento', socket.id);
   });
 
   socket.on('disconnect', () => {
     if (jogadoresOnline[socket.id]) {
-        console.log(`[SAIU] ${nome}`);
-        delete jogadoresOnline[socket.id];
-        io.emit('jogadorSaiu', socket.id);
-        io.emit('usuarioParouCompartilhamento', socket.id);
-        io.emit('listaUsuarios', jogadoresOnline);
+      console.log(`[saiu] ${nome}`);
+      delete jogadoresOnline[socket.id];
+      io.emit('jogadorSaiu', socket.id);
+      io.emit('usuarioParouCompartilhamento', socket.id);
+      io.emit('listaUsuarios', jogadoresOnline);
     }
   });
 }
 
-app.get(/(.*)/, (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
+app.get(/(.*)/, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 const portaServidor = process.env.PORT || 8081;
-servidorHttp.listen(portaServidor, '0.0.0.0', () => { console.log(`Servidor rodando na porta ${portaServidor}`); });
+servidorHttp.listen(portaServidor, '0.0.0.0', () => {
+  console.log(`servidor rodando na porta ${portaServidor}`);
+});
