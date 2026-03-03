@@ -1,40 +1,33 @@
-FROM node:22-slim
+# Estagio de construcao do cliente.
+from node:22-slim as builder
 
-WORKDIR /app
+workdir /app/client
 
-# 1. Instala dependencias
-COPY server/package*.json ./server/
-COPY client/package*.json ./client/
+copy client/package*.json ./
+run npm ci
 
-WORKDIR /app/server
-RUN npm ci --omit=dev
+copy client/ ./
+run npm run build
 
-WORKDIR /app/client
-RUN npm ci
+# Estagio final de producao.
+from node:22-slim
 
-# 2. Argumento para quebrar o cache (CACHEBUST)
-ARG CACHEBUST=1
+workdir /app
 
-# 3. Copia o código fonte
-WORKDIR /app
-COPY server/ ./server/
-COPY client/ ./client/
+run chown node:node /app
 
-# 4. Build do Frontend
-WORKDIR /app/client
-RUN npm run build
+user node
 
-# 5. Mover arquivos para o lugar CERTO (CORREÇÃO DE CAMINHO)
-WORKDIR /app
-# Garante que a pasta publica do servidor esteja limpa
-RUN rm -rf server/public
-RUN mkdir -p server/public
-# Copia do CLIENTE/DIST para SERVIDOR/PUBLIC
-RUN cp -r client/dist/* server/public/
+workdir /app/server
+copy --chown=node:node server/package*.json ./
+run npm ci --omit=dev
 
-# 6. Permissões e Execução
-RUN chown -R node:node /app
-USER node
-EXPOSE 8081
+copy --chown=node:node server/ ./
 
-CMD ["node", "server/index.js"]
+run mkdir -p public
+copy --chown=node:node --from=builder /app/client/dist/ ./public/
+
+workdir /app
+expose 8081
+
+cmd ["node", "server/index.js"]

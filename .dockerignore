@@ -1,5 +1,7 @@
-
 .git
 .github
 dist
-.DS_Store
+.ds_store
+node_modules
+server/node_modules
+client/node_modules
