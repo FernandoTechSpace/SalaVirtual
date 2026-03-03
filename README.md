@@ -39,5 +39,4 @@ Para executar o projeto localmente, é necessário ter instalado:
 ### Execução Local (Node.js)
 
 1. Clone o repositório e acesse a pasta raiz.
-2. Instale as dependências do servidor:
-   npm install
+2. Instale as dependências do servidor: npm install
