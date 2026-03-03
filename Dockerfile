@@ -2,7 +2,8 @@
 # Estagio 1: build do frontend (client)
 # Compila os assets estaticos via Vite
 # ============================================================
-FROM node:18-alpine AS build-client
+# Correcao: node:18-alpine e incompativel com Vite 7 (requer Node >= 20.19 ou >= 22.12)
+FROM node:22-alpine AS build-client
 
 WORKDIR /app/client
 
@@ -18,7 +19,7 @@ RUN npm run build
 # Estagio 2: imagem final de producao (server)
 # Serve apenas o backend com os assets estaticos ja compilados
 # ============================================================
-FROM node:18-alpine AS production
+FROM node:22-alpine AS production
 
 WORKDIR /app
 

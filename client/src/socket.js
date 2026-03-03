@@ -2,6 +2,11 @@
 // Responsavel por iniciar a conexao, autenticar via evento dedicado
 // e registrar os listeners de eventos globais do servidor
 
+// Correcao: io importado do pacote npm socket.io-client
+// O script CDN (/socket.io/socket.io.js) foi removido do index.html pois
+// socket.io-client ja e dependencia declarada no package.json do cliente
+import { io } from 'socket.io-client';
+
 import { ui, renderUserList, setSocketRef as setUiSocketRef } from './ui.js';
 import { setSocketRef as setAudioSocketRef, setupAudio } from './audio.js';
 import { setSocketRef as setWebrtcSocketRef, handleSignal } from './webrtc.js';

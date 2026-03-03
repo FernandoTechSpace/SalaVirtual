@@ -6,13 +6,17 @@
     <title>Virtual Room - Debug com Cafe</title>
 
     <!--
-      Correcao: CSS extraido do bloco <style> inline para arquivo separado
-      Todo o CSS original foi preservado sem alteracoes em style.css
+      Correcao: caminho atualizado para refletir a estrutura real do projeto
+      O style.css fica na raiz de client/, nao em css/
     -->
-    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="./style.css" />
 
+    <!--
+      Phaser carregado via CDN pois e uma dependencia de runtime grande.
+      O socket.io-client foi removido daqui: e importado via npm no main.js,
+      permitindo que o Vite o inclua corretamente no bundle.
+    -->
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
-    <script src="/socket.io/socket.io.js"></script>
   </head>
   <body>
     <div id="app">
@@ -68,9 +72,10 @@
     <div id="audio-remoto-container" style="display:none;"></div>
 
     <!--
-      Correcao: todo o JavaScript inline extraido para modulos separados
-      type="module" habilita importacoes ES6 entre os arquivos js/
+      Correcao: caminho atualizado de js/main.js para ./src/main.js,
+      refletindo a estrutura real do projeto (client/src/main.js).
+      O atributo type="module" e obrigatorio para o Vite processar o arquivo.
     -->
-    <script type="module" src="js/main.js"></script>
+    <script type="module" src="./src/main.js"></script>
   </body>
 </html>
