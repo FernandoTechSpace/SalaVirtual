@@ -1,6 +1,6 @@
 # Virtual Room - Debug com Café
 
-## Criei uma sala virtual para interação e colaboração, onde apliquei meu conhecimento técnico de JavaScript, Node.js, Express, Docker e Cloud.
+## Criei essa sala virtual aplicando meu conhecimento técnico de JavaScript, Node.js, Express, Docker e Cloud.
 
 Plataforma de interação virtual em tempo real, para colaboração entre a equipe tech, construída em ambiente 2D. O sistema permite que múltiplos usuários se conectem simultaneamente, naveguem pelo mapa, interajam via chat de texto, compartilhem áudio e transmitam a tela utilizando comunicação ponto a ponto (P2P).
 
