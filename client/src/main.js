@@ -44,7 +44,7 @@ window.onclick = () => {
 window.fecharVideo = fecharVideo;
 
 // Gerenciamento de teclado: chat e atalhos de jogo
-document.addEventListener('keydown', (e) => {
+document.addEventListener('keydown', async (e) => {
   if (ui.login.style.display !== 'none') return;
 
   if (document.activeElement === ui.chatInput) {
